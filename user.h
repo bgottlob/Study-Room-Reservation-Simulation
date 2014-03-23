@@ -1,3 +1,4 @@
+#ifndef USER_H
 #define USER_H
 
 typedef struct {
@@ -21,3 +22,5 @@ int callback(void *NotUsed, int argc, char **argv, char **azColName);
 void registerUser(User user);
 
 User createUser(int userID, char *email, int type);
+
+#endif

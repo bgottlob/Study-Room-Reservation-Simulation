@@ -17,7 +17,8 @@ User createUser(int userID, char *email, int type)
   return user;
 }
 
-int callback(void *NotUsed, int argc, char **argv, char **azColName){
+int callback(void *NotUsed, int argc, char **argv, char **azColName)
+{
    int i;
    for(i=0; i<argc; i++){
       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");

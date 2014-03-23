@@ -1,27 +1,40 @@
-typedef struct {
+#ifndef QUEUE_H
+#define QUEUE_H
+
+#include "reservation.h"
+
+struct RequestNode {
   Request request;
-  Request *nextRequest;
-} RequestNode;
+  struct RequestNode *nextRequest;
+};
 
 //RequestQueues will be used to select which Request will be turned into a Reservation first - this queue will be based on priority
 typedef struct {
-  RequestNode *head;
+  struct RequestNode *head;
   int size;
 } RequestQueue;
 
-void requestEnqueue(RequestQueue queue, Request request);
-Request requestDequeue(RequestQueue queue);
+RequestQueue createRequestQueue();
+void enqueueRequest(RequestQueue *queue, Request request);
+Request dequeueRequest(RequestQueue *queue);
 
-typedef struct {
+struct ReservationNode {
   Reservation reservation;
-  Reservation *nextReservation;
-} ReservationNode;
+  struct ReservationNode *nextReservation;
+};
 
 /*
   ReservationQueues will be used which reservation is added to the database first
   This queue will not be based on priority because no Reservations in the queue will conflict with each other
 */
 typedef struct {
-  Reservation head;
+  struct ReservationNode *head;
+  struct ReservationNode *rear;
   int size;
 } ReservationQueue;
+
+ReservationQueue createReservationQueue();
+void enqueueReservation(ReservationQueue *queue, Request request);
+Reservation dequeueReservation(ReservationQueue *queue);
+
+#endif

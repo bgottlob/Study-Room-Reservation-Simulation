@@ -1,21 +1,17 @@
+#ifndef RESERVATION_H
+#define RESERVATION_H
+
 #include "user.h"
-
-//Used to specify a range of time on a certain day
-typedef struct {
-  //The day number of the month, which can range from 1 to 31
-  int day;
-
-  //startTime and endTime represent hours in a 24-hour clock
-  int startTime;
-  int endTime;
-} TimeRange;
+#include <time.h>
 
 //A Request represents the user's input into the system
 typedef struct {
   int day;
+  int startTime;
+  int endTime;
   int seatsNeeded;
   User user;
-  TimeRange times;
+  time_t timeCreated;
 } Request;
 
 /*
@@ -25,15 +21,23 @@ typedef struct {
 */
 typedef struct {
   int roomNum;
-  TimeRange times;
+  int day;
+  int startTime;
+  int endTime;
   User user;
 } Reservation;
 
-//Finds a room and creates a reservation from it for the user
-void processRequest();
+//Constructors for Requests and Reservations
+Request createRequest(int day, int startTime, int endTime, User user);
+Reservation createReservation(int roomNum, int day, int startTime, int endTime, User user);
+
+//Finds a room and makes a reservation for the user
+void processRequest(Request request);
 
 //Takes a request and returns a reservation for the user
-void findRoom();
+Reservation findRoom(Request request);
 
 //Adds a reservation to the database
 void makeReservation();
+
+#endif
