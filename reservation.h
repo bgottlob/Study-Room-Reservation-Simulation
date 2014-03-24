@@ -4,6 +4,9 @@
 #include "user.h"
 #include <time.h>
 
+//All global variables are going to be defined here
+extern char dbFilename[25];
+
 //A Request represents the user's input into the system
 typedef struct {
   int day;
@@ -31,7 +34,10 @@ typedef struct {
 Request createRequest(int day, int startTime, int endTime, User user);
 Reservation createReservation(int roomNum, int day, int startTime, int endTime, User user);
 
-//Finds a room and makes a reservation for the user
+/*
+  Finds a room and makes a reservation for the user
+  This is the entry point of a user thread
+*/
 void processRequest(Request request);
 
 //Takes a request and returns a reservation for the user

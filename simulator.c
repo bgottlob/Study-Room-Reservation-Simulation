@@ -3,8 +3,6 @@
 #include <string.h>
 #include <unistd.h>
 
-extern char *dbFilename;
-
 int main() {
 
   /*RequestQueue queue = createRequestQueue();
@@ -82,6 +80,8 @@ int main() {
   printf("%s\n", rs2.user.email);
   printf("%s\n", rs3.user.email);
   printf("%s\n", rs4.user.email);*/
+
+  printf("%s\n", dbFilename);
 
   return 0;
 }

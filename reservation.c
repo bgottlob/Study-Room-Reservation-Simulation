@@ -1,4 +1,8 @@
 #include "reservation.h"
+#include <string.h>
+
+//All global variables are going to be initialized here
+char dbFilename[25] = "ReservationSystem.sqlite";
 
 Request createRequest(int day, int startTime, int endTime, User user)
 {
@@ -24,4 +28,9 @@ Reservation createReservation(int roomNum, int day, int startTime, int endTime, 
   reservation.user = user;
 
   return reservation;
+}
+
+void processRequest()
+{
+
 }

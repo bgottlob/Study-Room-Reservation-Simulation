@@ -5,8 +5,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-
-char dbFilename[] = "ReservationSystem.sqlite";
+#include "reservation.h"
 
 User createUser(int userID, char *email, int type)
 {
