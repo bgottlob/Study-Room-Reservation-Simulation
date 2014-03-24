@@ -8,6 +8,7 @@ Request createRequest(int day, int startTime, int endTime, User user)
   request.startTime = startTime;
   request.endTime = endTime;
   request.user = user;
+  request.timeCreated = time(NULL);
 
   return request;
 }

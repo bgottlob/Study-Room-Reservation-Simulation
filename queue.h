@@ -34,7 +34,7 @@ typedef struct {
 } ReservationQueue;
 
 ReservationQueue createReservationQueue();
-void enqueueReservation(ReservationQueue *queue, Request request);
+void enqueueReservation(ReservationQueue *queue, Reservation reservation);
 Reservation dequeueReservation(ReservationQueue *queue);
 
 #endif
