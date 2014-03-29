@@ -16,7 +16,7 @@ User createUser(int userID, char *email, int type)
   return user;
 }
 
-int callback(void *NotUsed, int argc, char **argv, char **azColName)
+static int registerUserCallback(void *NotUsed, int argc, char **argv, char **azColName)
 {
    int i;
    for(i=0; i<argc; i++){
@@ -49,14 +49,13 @@ void registerUser(User user)
     exit(0);
   }
 
-  //Create a buffer for a string of up to 130 characters for the SQL statement
-  char sql[130];
+  char sql[150];
   sprintf(sql, "INSERT INTO User (PawsID, Email, Type) VALUES (%d, '%s', %d)", user.userID, user.email, user.type);
   printf("%s\n", sql);
 
   char *errMsg;
 
-  err = sqlite3_exec(db, sql, callback, 0, &errMsg);
+  err = sqlite3_exec(db, sql, registerUserCallback, 0, &errMsg);
   if (err != SQLITE_OK)
   {
     printf("SQL error: %s\n", errMsg);

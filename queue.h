@@ -37,4 +37,8 @@ ReservationQueue createReservationQueue();
 void enqueueReservation(ReservationQueue *queue, Reservation reservation);
 Reservation dequeueReservation(ReservationQueue *queue);
 
+//Global queues that are going to be used for synchronization
+extern RequestQueue reqQueue;
+extern ReservationQueue resQueue;
+
 #endif

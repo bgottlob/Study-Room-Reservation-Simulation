@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//Redefinition of global queues to allow global usage
+RequestQueue reqQueue;
+ReservationQueue resQueue;
+
 RequestQueue createRequestQueue()
 {
   RequestQueue queue;
