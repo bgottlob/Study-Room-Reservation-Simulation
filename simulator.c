@@ -19,16 +19,16 @@ int main() {
   pthread_t t1, t2, t3, t4;
 
   Request *r1 = (Request *)malloc(sizeof(Request));
-  *r1 = createRequest(8, 12, 13, 5, createUser(12345, "faculty1@gmail.com", 2));
+  *r1 = createRequest(8, 12, 13, 12, createUser(12345, "faculty1@gmail.com", 2));
 
   Request *r2 = (Request *)malloc(sizeof(Request));
-  *r2 = createRequest(8, 12, 13, 4, createUser(23456, "student1@gmail.com", 1));
+  *r2 = createRequest(8, 12, 13, 12, createUser(23456, "student1@gmail.com", 1));
 
   Request *r3 = (Request *)malloc(sizeof(Request));
-  *r3 = createRequest(8, 12, 13, 8, createUser(34567, "faculty2@gmail.com", 2));
+  *r3 = createRequest(8, 12, 13, 12, createUser(34567, "faculty2@gmail.com", 2));
 
   Request *r4 = (Request *)malloc(sizeof(Request));
-  *r4 = createRequest(8, 12, 13, 3, createUser(45678, "student2@gmail.com", 1));
+  *r4 = createRequest(8, 12, 13, 12, createUser(45678, "student2@gmail.com", 1));
 
   pthread_create(&t1, NULL, startRequest, r1);
   pthread_create(&t2, NULL, startRequest, r2);
@@ -44,6 +44,15 @@ int main() {
   free(r2);
   r3 = NULL;
   free(r3);
+
+  /*Reservation res1 = createReservation(311, 8, 13, 14, createUser(23456, "student1@gmail.com", 2));
+  enqueueReservation(&resQueue, res1);
+  Reservation res2 = createReservation(314, 8, 16, 17, createUser(23456, "student1@gmail.com", 1));
+  enqueueReservation(&resQueue, res2);
+
+  Reservation rSearch = createReservation(200, 8, 13, 14, createUser(23456, "student1@gmail.com", 1));
+
+  printf("FoundRes: %d\n", searchForRes(&resQueue, res2));*/
 
   /*Request deqreq = dequeueRequest(&reqQueue);
   printf("Dequeued req: \nday: %d\nstartTime: %d\nendTime: %d\nseats: %d\nuserEmail: %s\n", deqreq.day, deqreq.startTime, deqreq.endTime, deqreq.seatsNeeded, deqreq.user.email);*/

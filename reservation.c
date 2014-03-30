@@ -159,15 +159,21 @@ Reservation findReservation(Request request)
     err = sqlite3_open(dbFilename, &db);
     if (err)
     {
-      printf("The database could not be opened\n");
-      exit(0);
+      printf("The database could not be opened, exiting\n");
+
+      pthread_mutex_unlock(&reqQueueLock);
+      pthread_mutex_unlock(&findResLock);
+      pthread_exit(NULL);
     }
   }
   else
   {
     //If the file doesn't exist, exit
-    printf("The database could not be found: %s does not exist\n", dbFilename);
-    exit(0);
+    printf("The database could not be found: %s does not exist, exiting\n", dbFilename);
+
+    pthread_mutex_unlock(&reqQueueLock);
+    pthread_mutex_unlock(&findResLock);
+    pthread_exit(NULL);
   }
 
   //Create SQL statement
@@ -184,8 +190,11 @@ Reservation findReservation(Request request)
   if( err != SQLITE_OK ){
     fprintf(stderr, "SQL error: %s\n", errMsg);
     sqlite3_free(errMsg);
-  }else{
-    printf("Operation done successfully\n");
+
+    //If there is an SQLite error, exit the thread
+    pthread_mutex_unlock(&reqQueueLock);
+    pthread_mutex_unlock(&findResLock);
+    pthread_exit(NULL);
   }
 
   //Sorts the array of rooms based on the criteria laid out by the compareRooms function
@@ -212,7 +221,11 @@ Reservation findReservation(Request request)
     if( err != SQLITE_OK ){
       fprintf(stderr, "SQL error: %s\n", errMsg);
       sqlite3_free(errMsg);
-      exit(0);
+
+      //If there is an SQLite error, exit the thread
+      pthread_mutex_unlock(&reqQueueLock);
+      pthread_mutex_unlock(&findResLock);
+      pthread_exit(NULL);
     }
 
     int i;
@@ -289,15 +302,21 @@ void makeReservation(Reservation reservation)
     err = sqlite3_open(dbFilename, &db);
     if (err)
     {
-      printf("The database could not be opened\n");
-      exit(0);
+      printf("The database could not be opened, exiting\n");
+
+      pthread_mutex_unlock(&resQueueLock);
+      pthread_mutex_unlock(&makeResLock);
+      pthread_exit(NULL);
     }
   }
   else
   {
     //If the file doesn't exist, exit
-    printf("The database could not be found: %s does not exist\n", dbFilename);
-    exit(0);
+    printf("The database could not be found: %s does not exist, exiting\n", dbFilename);
+
+    pthread_mutex_unlock(&resQueueLock);
+    pthread_mutex_unlock(&makeResLock);
+    pthread_exit(NULL);
   }
 
   //Create SQL INSERT statement
@@ -311,6 +330,10 @@ void makeReservation(Reservation reservation)
   if( err != SQLITE_OK ){
     fprintf(stderr, "SQL error: %s\n", errMsg);
     sqlite3_free(errMsg);
+
+    pthread_mutex_unlock(&resQueueLock);
+    pthread_mutex_unlock(&makeResLock);
+    pthread_exit(NULL);
   }else{
     printf("Reservation for %s added in the database\n", reservation.user.email);
   }
@@ -330,7 +353,7 @@ void* startRequest(void *arg)
 {
   //Convert the void pointer to a pointer to a Request
   Request *ptr = (Request *)arg;
-  
+
   //CHECK THE DATABASE TO MAKE SURE THE USER IS REGISTERED AND REGISTER IF NOT – MUST USE MUTEX LOCKS FOR INTEGRITY OF USER TABLE
 
   pthread_mutex_lock(&reqQueueLock);

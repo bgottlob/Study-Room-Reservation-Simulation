@@ -39,14 +39,14 @@ void registerUser(User user)
     if (err)
     {
       printf("The database could not be opened\n");
-      exit(0);
+      pthread_exit(NULL);
     }
   }
   else
   {
     //If the file doesn't exist, exit
     printf("The database could not be found: %s does not exist\n", dbFilename);
-    exit(0);
+    pthread_exit(NULL);
   }
 
   char sql[150];
@@ -61,11 +61,12 @@ void registerUser(User user)
 
   if (err != SQLITE_OK)
   {
-    printf("SQL error: %s\n", errMsg);
+    printf("SQL error: %s, exiting\n", errMsg);
     sqlite3_free(errMsg);
+    pthread_exit(NULL);
   }
   else
-    printf("You have been registered to the reservation system\n");
+    printf("%s has been registered to the reservation system\n", user.email);
 
   sqlite3_close(db);
 }

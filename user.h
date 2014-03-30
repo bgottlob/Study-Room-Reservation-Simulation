@@ -3,7 +3,7 @@
 
 typedef struct {
   int userID;
-  char email[50];
+  char email[150];
   int type;
 } User;
 

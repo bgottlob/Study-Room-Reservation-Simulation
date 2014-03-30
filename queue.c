@@ -22,7 +22,7 @@ RequestQueue createRequestQueue()
 
 void enqueueRequest(RequestQueue *queue, Request request)
 {
-  struct RequestNode *newNode = malloc(sizeof(struct RequestNode)); 
+  struct RequestNode *newNode = malloc(sizeof(struct RequestNode));
 
   newNode->request = request;
 
@@ -84,8 +84,9 @@ Request dequeueRequest(RequestQueue *queue)
 {
   if (queue->size == 0)
   {
-    printf("There's nothing in this queue, exiting");
-    exit(0);
+    printf("There's nothing in this queue, returning and un-initialized request\n");
+    Request req;
+    return req;
   }
   else
   {
@@ -136,8 +137,9 @@ Reservation dequeueReservation(ReservationQueue *queue)
 {
   if (queue->size == 0)
   {
-    printf("There's nothing in this queue, exiting");
-    exit(0);
+    printf("There's nothing in this queue, returning un-initialized reservation\n");
+    Reservation res;
+    return res;
   }
   else
   {
@@ -147,4 +149,24 @@ Reservation dequeueReservation(ReservationQueue *queue)
 
     return removed.reservation;
   }
+}
+
+int searchForRes(ReservationQueue *queue, Reservation reservation)
+{
+  //Boolean variable that will be set to 1 if a matching reservation has been found in the queue
+  int foundMatch = 0;
+
+  struct ReservationNode *currentNode = queue->head;
+
+  while (foundMatch == 0 && currentNode != NULL)
+  {
+    if (currentNode->reservation.roomNum == reservation.roomNum && currentNode->reservation.day == reservation.day && currentNode->reservation.startTime == reservation.startTime && currentNode->reservation.endTime == reservation.endTime && currentNode->reservation.user.userID == reservation.user.userID)
+      foundMatch = 1;
+    else
+      currentNode = currentNode->nextReservation;
+  }
+
+  currentNode = NULL;
+
+  return foundMatch;
 }
