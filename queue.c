@@ -84,7 +84,7 @@ Request dequeueRequest(RequestQueue *queue)
 {
   if (queue->size == 0)
   {
-    printf("There's nothing in this queue, returning and un-initialized request\n");
+    printf("There's nothing in this queue, returning un-initialized request\n");
     Request req;
     return req;
   }
@@ -160,7 +160,8 @@ int searchForRes(ReservationQueue *queue, Reservation reservation)
 
   while (foundMatch == 0 && currentNode != NULL)
   {
-    if (currentNode->reservation.roomNum == reservation.roomNum && currentNode->reservation.day == reservation.day && currentNode->reservation.startTime == reservation.startTime && currentNode->reservation.endTime == reservation.endTime && currentNode->reservation.user.userID == reservation.user.userID)
+    //The values of the user struct member will not be checked because this method will be used to determine if a certain reservation can be made by a different user, so the user members of the two Reservations being compared will never be the same
+    if (currentNode->reservation.roomNum == reservation.roomNum && currentNode->reservation.day == reservation.day && currentNode->reservation.startTime == reservation.startTime && currentNode->reservation.endTime == reservation.endTime)
       foundMatch = 1;
     else
       currentNode = currentNode->nextReservation;

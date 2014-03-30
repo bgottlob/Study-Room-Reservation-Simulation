@@ -26,6 +26,12 @@ static int registerUserCallback(void *NotUsed, int argc, char **argv, char **azC
    return 0;
 }
 
+static int userFoundCallback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+  userFound = 1;
+  return 0;
+}
+
 void registerUser(User user)
 {
   sqlite3 *db;
@@ -50,23 +56,62 @@ void registerUser(User user)
   }
 
   char sql[150];
-  sprintf(sql, "INSERT INTO User (PawsID, Email, Type) VALUES (%d, '%s', %d)", user.userID, user.email, user.type);
-  printf("%s\n", sql);
-
   char *errMsg;
 
-  pthread_mutex_lock(&dbLock);
-  err = sqlite3_exec(db, sql, registerUserCallback, 0, &errMsg);
-  pthread_mutex_unlock(&dbLock);
+  sprintf(sql, "SELECT PawsID FROM User WHERE PawsID = %d AND Email = '%s' AND Type = %d", user.userID, user.email, user.type);
 
+  pthread_mutex_lock(&dbLock);
+  userFound = 0;
+  err = sqlite3_exec(db, sql, userFoundCallback, 0, &errMsg);
   if (err != SQLITE_OK)
   {
     printf("SQL error: %s, exiting\n", errMsg);
     sqlite3_free(errMsg);
+
+    pthread_mutex_unlock(&dbLock);
     pthread_exit(NULL);
   }
+
+  //If userFound == 0, the user was not found in the database and that user must now be added
+  if (userFound == 0)
+  {
+    //Reset userFound for the next query
+    userFound = 1;
+    pthread_mutex_unlock(&dbLock);
+
+    sprintf(sql, "INSERT INTO User (PawsID, Email, Type) VALUES (%d, '%s', %d)", user.userID, user.email, user.type);
+
+    pthread_mutex_lock(&dbLock);
+    err = sqlite3_exec(db, sql, registerUserCallback, 0, &errMsg);
+    pthread_mutex_unlock(&dbLock);
+
+    if (err != SQLITE_OK)
+    {
+      printf("SQL error: %s, exiting\n", errMsg);
+      sqlite3_free(errMsg);
+      pthread_exit(NULL);
+    }
+    else
+    {
+      printf("%s has been registered to the reservation system\n", user.email);
+
+      char fileName[154];
+      sprintf(fileName, "%s.txt", user.email);
+
+      FILE *file;
+      file = fopen(fileName, "a+");
+      if (file == NULL)
+        printf("Error opening %s\n", fileName);
+      else
+        fprintf(file, "%s has been registered to the reservation system\n", user.email);
+
+      fclose(file);
+    }
+  }
   else
-    printf("%s has been registered to the reservation system\n", user.email);
+  {
+    pthread_mutex_unlock(&dbLock);
+  }
 
   sqlite3_close(db);
 }

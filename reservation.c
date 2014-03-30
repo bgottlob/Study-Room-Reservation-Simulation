@@ -7,7 +7,7 @@
 #include "queue.h"
 
 #define MAX_ROOMS 26
-#define MAX_RESERVATIONS 16
+#define MAX_RESERVATIONS 24
 
 //Some global variables are going to be initialized here
 char dbFilename[25] = "ReservationSystem.sqlite";
@@ -67,14 +67,10 @@ static int selectRoomCallback(void *NotUsed, int argc, char **argv, char **azCol
       else
         room.hasPurpose = 0;
     }
-
-    //printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
   }
 
   compatibleRooms[compatibleRoomsSize] = room;
   compatibleRoomsSize++;
-
-  //printf("\n");
 
   return 0;
 }
@@ -142,7 +138,7 @@ int compareRooms(const void *r1, const void *r2)
     return 1;
 }
 
-Reservation findReservation(Request request)
+Reservation findReservation(Request request, int mustReschedule, Reservation *adminRes)
 {
   //The reservation struct that will be returned
   Reservation reservation;
@@ -163,6 +159,7 @@ Reservation findReservation(Request request)
 
       pthread_mutex_unlock(&reqQueueLock);
       pthread_mutex_unlock(&findResLock);
+      pthread_mutex_unlock(&makeResLock);
       pthread_exit(NULL);
     }
   }
@@ -173,6 +170,7 @@ Reservation findReservation(Request request)
 
     pthread_mutex_unlock(&reqQueueLock);
     pthread_mutex_unlock(&findResLock);
+    pthread_mutex_unlock(&makeResLock);
     pthread_exit(NULL);
   }
 
@@ -194,6 +192,7 @@ Reservation findReservation(Request request)
     //If there is an SQLite error, exit the thread
     pthread_mutex_unlock(&reqQueueLock);
     pthread_mutex_unlock(&findResLock);
+    pthread_mutex_unlock(&makeResLock);
     pthread_exit(NULL);
   }
 
@@ -225,6 +224,7 @@ Reservation findReservation(Request request)
       //If there is an SQLite error, exit the thread
       pthread_mutex_unlock(&reqQueueLock);
       pthread_mutex_unlock(&findResLock);
+      pthread_mutex_unlock(&makeResLock);
       pthread_exit(NULL);
     }
 
@@ -245,22 +245,32 @@ Reservation findReservation(Request request)
         foundOverlap = 1;
     }
 
+    //A boolean value that determines if the proposed rescheduling time conflicts with the admin's reservation time (if applicable)
+    if (adminRes != NULL && mustReschedule == 1)
+    {
+      if (currentRoom.roomNum == adminRes->roomNum && request.day == adminRes->day)
+      {
+        //Checks if the times of the two reservations conflict
+        if (request.startTime <= adminRes->endTime && adminRes->startTime <= request.endTime)
+          foundOverlap = 1;
+      }
+    }
+
     //If no overlapping time periods have been found, the request is valid and the proper room has been found
     if (foundOverlap == 0)
     {
-
-      //ADD A SEARCH OF THE RESERVATION QUEUE TO MAKE SURE THE SAME RESERVATION IS NOT GOING TO BE MADE
-      //THAT SEARCH FUNCTION MUST BLOCK RESERVATIONS QUEUE FROM CHANGING UNTIL IT IS DONE AND MUST WAIT IF THE RESERVATION QUEUE IS CURRENTLY IN THE CRITICAL SECTION
-
-      //DO THIS STUFF IF NO MATCHING RESERVATION IS FOUND IN THE QUEUE - IF NOT DO NOTHING, AND THE LOOP WILL START AGAIN
-      foundRes = 1;
-
       //Initialize the reservation object to be returned
       reservation.roomNum = currentRoom.roomNum;
       reservation.day = request.day;
       reservation.startTime = request.startTime;
       reservation.endTime = request.endTime;
       reservation.user = request.user;
+
+      pthread_mutex_lock(&resQueueLock);
+      //If this reservation is already in the resQueue, it can't be made and a different reservation should be found - if the return value of the searchForRes function is 0, a matching reservation has not been found in the queue; if the return value is one, foundRes will stay at 0 and another reservation may be found
+      if (searchForRes(&resQueue, reservation) == 0)
+        foundRes = 1;
+      pthread_mutex_unlock(&resQueueLock);
     }
 
     free(resIntervals);
@@ -275,15 +285,35 @@ Reservation findReservation(Request request)
 
   sqlite3_close(db);
 
-  if (foundRes == 0)
+  if (foundRes == 0 && mustReschedule == 0)
   {
     printf("No room for %s was found, exiting\n", request.user.email);
     pthread_mutex_unlock(&reqQueueLock);
     pthread_mutex_unlock(&findResLock);
+    pthread_mutex_unlock(&makeResLock);
     pthread_exit(NULL);
   }
-  else
-    printf("%s's reservation is as follows:\nRoomNum: %d\nDay: %d\nStartTime: %d\nEndTime: %d\nuserEmail:%s\n", reservation.user.email, reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime, reservation.user.email);
+  else if (foundRes == 0 && mustReschedule == 1)
+  {
+    printf("%s: Your reservation was overridden by an administrator and could not be rescheduled\n", request.user.email);
+
+    //Write to output file
+    char fileName[154];
+    sprintf(fileName, "%s.txt", request.user.email);
+
+    FILE *file;
+    file = fopen(fileName, "a+");
+    if (file == NULL)
+      printf("Error opening %s\n", fileName);
+    else
+      fprintf(file, "%s: Your reservation was overridden by an administrator and could not be rescheduled\n", request.user.email);
+
+    fclose(file);
+
+    Reservation res;
+    res.day = -1;
+    return res;
+  }
 
   return reservation;
 }
@@ -334,8 +364,22 @@ void makeReservation(Reservation reservation)
     pthread_mutex_unlock(&resQueueLock);
     pthread_mutex_unlock(&makeResLock);
     pthread_exit(NULL);
-  }else{
-    printf("Reservation for %s added in the database\n", reservation.user.email);
+  }else
+  {
+    printf("%s: Your reservation has been scheduled as follows:\nRoomNum: %d\nDay: %d\nStartTime: %d\nEndTime: %d\n\n", reservation.user.email, reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime);
+
+    //Write to output file
+    char fileName[154];
+    sprintf(fileName, "%s.txt", reservation.user.email);
+
+    FILE *file;
+    file = fopen(fileName, "a+");
+    if (file == NULL)
+      printf("Error opening %s\n", fileName);
+    else
+      fprintf(file, "%s: Your reservation has been scheduled as follows:\nRoomNum: %d\nDay: %d\nStartTime: %d\nEndTime: %d\n\n", reservation.user.email, reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime);
+
+    fclose(file);
   }
 }
 
@@ -349,12 +393,333 @@ static int makeReservationCallback(void *NotUsed, int argc, char **argv, char **
    return 0;
 }
 
+static int selectResCallback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+  //This method is called once for each row that is returned by the SELECT query
+
+  Reservation reservation;
+
+  int i;
+  //Iterating through the results of the SELECT query
+  for(i = 0; i < argc; i++){
+    if (strcmp(azColName[i], "StartTime") == 0)
+      reservation.startTime = atoi(argv[i]);
+    else if (strcmp(azColName[i], "EndTime") == 0)
+      reservation.endTime = atoi(argv[i]);
+    else if (strcmp(azColName[i], "UserID") == 0)
+      reservation.user.userID = atoi(argv[i]);
+    else if (strcmp(azColName[i], "RoomNumber") == 0)
+      reservation.roomNum = atoi(argv[i]);
+    else if (strcmp(azColName[i], "Day") == 0)
+      reservation.day = atoi(argv[i]);
+  }
+
+  possibleReservations[possibleReservationsSize] = reservation;
+  possibleReservationsSize++;
+
+  return 0;
+}
+
+void makeAdminReservation(Reservation reservation)
+{
+  //Getting a list of reservations for the room and day the admin wants that are already in the database
+  sqlite3 *db;
+  int err;
+  char *errMsg;
+  const char *data = "Callback function called";
+
+  //Opening the database
+  //Check if the file at dbFilename exists
+  if(access(dbFilename, F_OK) != -1) {
+    //If the file exists, open the database
+    err = sqlite3_open(dbFilename, &db);
+    if (err)
+    {
+      printf("The database could not be opened, exiting\n");
+
+      pthread_mutex_unlock(&makeResLock);
+      pthread_exit(NULL);
+    }
+  }
+  else
+  {
+    //If the file doesn't exist, exit
+    printf("The database could not be found: %s does not exist, exiting\n", dbFilename);
+
+    pthread_mutex_unlock(&makeResLock);
+    pthread_exit(NULL);
+  }
+
+  //Create SQL statement
+  char sql[150];
+  sprintf(sql, "SELECT UserID,StartTime,EndTime,RoomNumber,Day FROM Reservation WHERE RoomNumber = %d AND Day = %d", reservation.roomNum, reservation.day);
+
+  possibleReservations = malloc(sizeof(Reservation) * MAX_RESERVATIONS);
+  possibleReservationsSize = 0;
+
+  pthread_mutex_lock(&dbLock);
+  err = sqlite3_exec(db, sql, selectResCallback, (void*)data, &errMsg);
+  pthread_mutex_unlock(&dbLock);
+
+  if( err != SQLITE_OK ){
+    fprintf(stderr, "SQL error: %s\n", errMsg);
+    sqlite3_free(errMsg);
+
+    //If there is an SQLite error, exit the thread
+    pthread_mutex_unlock(&makeResLock);
+    pthread_exit(NULL);
+  }
+
+  int index;
+  for (index = 0; index < possibleReservationsSize; index++)
+  {
+    Reservation currentRes = possibleReservations[index];
+
+    if (currentRes.startTime <= reservation.endTime && reservation.startTime <= currentRes.endTime)
+    {
+      //currentRes must be deleted from the database and rescheduled if possible
+      sprintf(sql, "DELETE FROM Reservation WHERE RoomNumber = %d AND Day = %d AND StartTime = %d AND EndTime = %d", currentRes.roomNum, currentRes.day, currentRes.startTime, currentRes.endTime);
+
+      //Run the deletion from the database
+      pthread_mutex_lock(&dbLock);
+      err = sqlite3_exec(db, sql, selectResCallback, (void*)data, &errMsg);
+      pthread_mutex_unlock(&dbLock);
+
+      if( err != SQLITE_OK ){
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+
+        //If there is an SQLite error, exit the thread
+        pthread_mutex_unlock(&makeResLock);
+        pthread_exit(NULL);
+      }
+
+      currentResUser.userID = currentRes.user.userID;
+
+      //Attempt to reschedule currentRes since it has just been deleted
+      //First, find the user whose reservation has been overridden in the User table to complete his/her data
+      sprintf(sql, "SELECT Email,Type FROM User WHERE PawsID = %d", currentResUser.userID);
+
+      //Run the deletion from the database
+      pthread_mutex_lock(&dbLock);
+      err = sqlite3_exec(db, sql, selectUserCallback, (void*)data, &errMsg);
+      pthread_mutex_unlock(&dbLock);
+
+      if( err != SQLITE_OK ){
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+
+        //If there is an SQLite error, exit the thread
+        pthread_mutex_unlock(&makeResLock);
+        pthread_exit(NULL);
+      }
+
+      //Next, find the number of seats that were in the room from currentRes
+      sprintf(sql, "SELECT Seating FROM Room WHERE RoomNumber = %d", currentRes.roomNum);
+
+      //Run the deletion from the database
+      pthread_mutex_lock(&dbLock);
+      err = sqlite3_exec(db, sql, selectRoomNumCallback, (void*)data, &errMsg);
+      pthread_mutex_unlock(&dbLock);
+
+      if( err != SQLITE_OK ){
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+
+        //If there is an SQLite error, exit the thread
+        pthread_mutex_unlock(&makeResLock);
+        pthread_exit(NULL);
+      }
+
+      //The user and room seating data is complete, so a new request can now be created
+      Request newReq = createRequest(currentRes.day, currentRes.startTime, currentRes.endTime, currentRoomSeating, currentResUser);
+      Reservation newRes = findReservation(newReq, 1, &reservation);
+
+      int search = searchForRes(&resQueue, newRes);
+
+      //If the day of the new reservation was set to -1, a valid reservation was not found so newRes should not be added to the database
+      //Also, in order for a reschedule to occur, the new reservaiton must not already be in the resQueue
+      if (newRes.day != -1 && search == 0)
+      {
+        printf("%s: Your reservation is to be rescheduled\n", newRes.user.email);
+
+        //Write to output file
+        char fileName[154];
+        sprintf(fileName, "%s.txt", newRes.user.email);
+
+        FILE *file;
+        file = fopen(fileName, "a+");
+        if (file == NULL)
+          printf("Error opening %s\n", fileName);
+        else
+          fprintf(file, "%s: Your reservation is to be rescheduled\n", newRes.user.email);
+
+        fclose(file);
+
+        makeReservation(newRes);
+      }
+      else
+      {
+        printf("%s: Your reservation was overridden by an administrator and could not be rescheduled\n\n", newRes.user.email);
+
+        //Write to output file
+        char fileName[154];
+        sprintf(fileName, "%s.txt", newRes.user.email);
+
+        FILE *file;
+        file = fopen(fileName, "a+");
+        if (file == NULL)
+          printf("Error opening %s\n", fileName);
+        else
+          fprintf(file, "%s: Your reservation was overridden by an administrator and could not be rescheduled\n\n", newRes.user.email);
+
+        fclose(file);
+      }
+
+    }
+  }
+
+  //Make the admin's original reservation
+  makeReservation(reservation);
+}
+
+static int selectUserCallback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+  //This method is called once for each row that is returned by the SELECT query
+
+  int i;
+  //Iterating through the results of the SELECT query
+  for(i = 0; i < argc; i++){
+    if (strcmp(azColName[i], "Email") == 0)
+      strcpy(currentResUser.email, argv[i]);
+    else if (strcmp(azColName[i], "Type") == 0)
+      currentResUser.type = atoi(argv[i]);
+  }
+
+  return 0;
+}
+
+static int selectRoomNumCallback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+  //This method is called once for each row that is returned by the SELECT query
+
+  int i;
+  //Iterating through the results of the SELECT query
+  for(i = 0; i < argc; i++){
+    if (strcmp(azColName[i], "Seating") == 0)
+      currentRoomSeating = atoi(argv[i]);
+  }
+
+  return 0;
+}
+
+void cancelReservation(Reservation reservation)
+{
+  sqlite3 *db;
+  int err;
+  char *errMsg;
+  const char *data = "Callback function called";
+
+  //Opening the database
+  //Check if the file at dbFilename exists
+  if(access(dbFilename, F_OK) != -1) {
+    //If the file exists, open the database
+    err = sqlite3_open(dbFilename, &db);
+    if (err)
+    {
+      printf("The database could not be opened, exiting\n");
+      pthread_exit(NULL);
+    }
+  }
+  else
+  {
+    //If the file doesn't exist, exit
+    printf("The database could not be found: %s does not exist, exiting\n", dbFilename);
+    pthread_exit(NULL);
+  }
+
+  didCancelRes = 0;
+
+  //Create SQL statement
+  char sql[150];
+  sprintf(sql, "SELECT ID FROM Reservation WHERE RoomNumber = %d AND Day = %d AND StartTime = %d AND EndTime = %d AND UserID = %d", reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime, reservation.user.userID);
+
+  //Check to see if the reservation actually exists
+  pthread_mutex_lock(&dbLock);
+  err = sqlite3_exec(db, sql, cancelResCallback, (void*)data, &errMsg);
+  pthread_mutex_unlock(&dbLock);
+
+  if( err != SQLITE_OK ){
+    fprintf(stderr, "SQL error: %s\n", errMsg);
+    sqlite3_free(errMsg);
+
+    pthread_exit(NULL);
+  }
+
+  if (didCancelRes == 1)
+  {
+    char sql[150];
+    sprintf(sql, "DELETE FROM Reservation WHERE RoomNumber = %d AND Day = %d AND StartTime = %d AND EndTime = %d AND UserID = %d", reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime, reservation.user.userID);
+
+    //Delete the reservation
+    pthread_mutex_lock(&dbLock);
+    err = sqlite3_exec(db, sql, cancelResCallback, (void*)data, &errMsg);
+    pthread_mutex_unlock(&dbLock);
+    if( err != SQLITE_OK ){
+      fprintf(stderr, "SQL error: %s\n", errMsg);
+      sqlite3_free(errMsg);
+
+      pthread_exit(NULL);
+    }
+    else
+    {
+      printf("%s: Your reservation in Room %d from %d to %d on %d has been cancelled\n", reservation.user.email, reservation.roomNum, reservation.startTime, reservation.endTime, reservation.day);
+
+      //Write to output file
+      char fileName[154];
+      sprintf(fileName, "%s.txt", reservation.user.email);
+
+      FILE *file;
+      file = fopen(fileName, "a+");
+      if (file == NULL)
+        printf("Error opening %s\n", fileName);
+      else
+        fprintf(file, "%s: Your reservation in Room %d from %d to %d on %d has been cancelled\n", reservation.user.email, reservation.roomNum, reservation.startTime, reservation.endTime, reservation.day);
+
+      fclose(file);
+    }
+  }
+  else
+  {
+    printf("%s: Your reservation did not exist, so it could not be cancelled\n", reservation.user.email);
+
+    //Write to output file
+    char fileName[154];
+    sprintf(fileName, "%s.txt", reservation.user.email);
+
+    FILE *file;
+    file = fopen(fileName, "a+");
+    if (file == NULL)
+      printf("Error opening %s\n", fileName);
+    else
+      fprintf(file, "%s: Your reservation did not exist, so it could not be cancelled\n", reservation.user.email);
+
+    fclose(file);
+  }
+}
+
+static int cancelResCallback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+  didCancelRes = 1;
+  return 0;
+}
+
 void* startRequest(void *arg)
 {
   //Convert the void pointer to a pointer to a Request
   Request *ptr = (Request *)arg;
 
-  //CHECK THE DATABASE TO MAKE SURE THE USER IS REGISTERED AND REGISTER IF NOT – MUST USE MUTEX LOCKS FOR INTEGRITY OF USER TABLE
+  registerUser(ptr->user);
 
   pthread_mutex_lock(&reqQueueLock);
   //printf("Locked reqQueueLock\n");
@@ -384,7 +749,7 @@ void* processNextRequest()
     pthread_mutex_unlock(&reqQueueLock);
     //printf("Unlocked reqQueueLock\n");
 
-    Reservation reservation = findReservation(request);
+    Reservation reservation = findReservation(request, 0, NULL);
 
     pthread_mutex_lock(&resQueueLock);
     //printf("Locked resQueueLock\n");
@@ -406,6 +771,7 @@ void* processNextRequest()
 
 void* processNextReservation()
 {
+  //sleep(2);
   pthread_mutex_lock(&makeResLock);
   //printf("Locked makeRes\n");
 
@@ -417,10 +783,31 @@ void* processNextReservation()
     pthread_mutex_unlock(&resQueueLock);
     //printf("Unlocked resQueueLock\n");
 
-    makeReservation(reservation);
+    if (reservation.user.type == 0)
+      makeAdminReservation(reservation);
+    else
+      makeReservation(reservation);
 
   pthread_mutex_unlock(&makeResLock);
   //printf("Unlocked makeRes\n");
+
+  return NULL;
+}
+
+void* processAdminReservation(void *arg)
+{
+  Reservation *ptr = (Reservation *)arg;
+
+  registerUser(ptr->user);
+
+  pthread_mutex_lock(&resQueueLock);
+    enqueueReservation(&resQueue, *ptr);
+  pthread_mutex_unlock(&resQueueLock);
+
+  //Create another thread to process the next reservation so that the admin's reservation can be made
+  pthread_t nextThread;
+  pthread_create(&nextThread, NULL, processNextReservation, NULL);
+  pthread_join(nextThread, NULL);
 
   return NULL;
 }

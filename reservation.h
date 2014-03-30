@@ -50,7 +50,7 @@ typedef struct {
 //Static variable for an array of Room structs to be used in the selectRoomCallback and findReservation functions
 static Room *compatibleRooms;
 //A static variable for the number of elements in the compatibleRooms array
-int compatibleRoomsSize;
+static int compatibleRoomsSize;
 
 int compareRooms(const void *r1, const void *r2);
 
@@ -61,11 +61,27 @@ static int selectRoomCallback(void *NotUsed, int argc, char **argv, char **azCol
 Request createRequest(int day, int startTime, int endTime, int seatsNeeded, User user);
 Reservation createReservation(int roomNum, int day, int startTime, int endTime, User user);
 
-//Takes a request and returns a reservation for the user
-Reservation findReservation(Request request);
+//Takes a request and returns a reservation for the user - if mustReschedule is set to 1, that means that the request was formerly a deleted reservation and must be rescheduled - adminRes is a pointer to a Reservation that the returned reservation must not conflict with
+Reservation findReservation(Request request, int mustReschedule, Reservation *adminRes);
 
 //Adds a reservation to the database
 void makeReservation(Reservation reservation);
+
+//Adds an admin's reservation to the database and attempts to reschedule and overridden ones
+void makeAdminReservation(Reservation reservation);
+
+//A static array variable for storing all of the Reservations returned by a SELECT statement in the makeAdminReservation function
+static Reservation *possibleReservations;
+//A static variable for the number of elements in the possibleReservations array
+static int possibleReservationsSize;
+
+//Used to set currentResUser from the results of a query on the User table
+static int selectUserCallback(void *NotUsed, int argc, char **argv, char **azColName);
+
+//A static User variable to store the user's data from a SELECT statement on the User table
+static User currentResUser;
+//A static int variable to store a number of seats in a room returned by a SELECT statment
+int currentRoomSeating;
 
 //A callback function for the makeReservation INSERT statement just in case something goes wrong
 static int makeReservationCallback(void *NotUsed, int argc, char **argv, char **azColName);
@@ -73,9 +89,20 @@ static int makeReservationCallback(void *NotUsed, int argc, char **argv, char **
 //A callback function to get the results of a SELECT query on the Reservation table and store TimeIntervals
 static int selectResTimeCallback(void *NotUsed, int argc, char **argv, char **azColName);
 
+//A callback to set the currentRoomSeating variable from a SELECT statment on the Room table
+static int selectRoomNumCallback(void *NotUsed, int argc, char **argv, char **azColName);
+
 //Static variable for holding the TimeInterval structs found from a query on the Reservation table
 static TimeInterval *resIntervals;
-int resIntervalsSize;
+static int resIntervalsSize;
+
+//Cancels a user's reservation
+void cancelReservation(Reservation reservation);
+//A static int variable for that indicates whether a canceled reservation previously existed or not
+static int didCancelRes;
+
+//Callback that is called if a reservation was deleted
+static int cancelResCallback(void *NotUsed, int argc, char **argv, char **azColName);
 
 //Enqueues a request on the request queue and uses mutex locks for synchronization then creates a new thread for dequeuing and servicing a request
 void *startRequest(void *arg);
