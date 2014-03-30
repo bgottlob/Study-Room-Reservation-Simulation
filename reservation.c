@@ -1,6 +1,6 @@
 #include "reservation.h"
 #include <string.h>
-#include <sqlite3.h>
+#include "sqlite3.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -215,14 +215,16 @@ Reservation findReservation(Request request)
       exit(0);
     }
 
-    for (int i = 0; i < resIntervalsSize; i++)
+    int i;
+    for (i = 0; i < resIntervalsSize; i++)
     {
       TimeInterval interval = resIntervals[i];
     }
 
     //This will be set to 1 if there any existing reservations overlap with what the user is trying to request
     int foundOverlap = 0;
-    for (int timeIndex = 0; timeIndex < resIntervalsSize && foundOverlap == 0; timeIndex++)
+    int timeIndex;
+    for (timeIndex = 0; timeIndex < resIntervalsSize && foundOverlap == 0; timeIndex++)
     {
       TimeInterval interval = resIntervals[timeIndex];
 

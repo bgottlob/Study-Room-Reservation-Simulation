@@ -1,5 +1,5 @@
 simulator.out : simulator.o user.o queue.o reservation.o
-	gcc -g -lsqlite3 -lpthread simulator.o user.o queue.o reservation.o sqlite3.o -o simulator.out
+	gcc -g -ldl -lpthread simulator.o user.o queue.o reservation.o sqlite3.o -o simulator.out
 
 simulator.o : simulator.c
 	gcc -g -c simulator.c -o simulator.o
