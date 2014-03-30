@@ -55,7 +55,10 @@ void registerUser(User user)
 
   char *errMsg;
 
+  pthread_mutex_lock(&dbLock);
   err = sqlite3_exec(db, sql, registerUserCallback, 0, &errMsg);
+  pthread_mutex_unlock(&dbLock);
+
   if (err != SQLITE_OK)
   {
     printf("SQL error: %s\n", errMsg);

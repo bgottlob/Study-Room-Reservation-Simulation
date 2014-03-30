@@ -4,12 +4,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include "queue.h"
 
 #define MAX_ROOMS 26
 #define MAX_RESERVATIONS 16
 
-//All global variables are going to be initialized here
+//Some global variables are going to be initialized here
 char dbFilename[25] = "ReservationSystem.sqlite";
+pthread_mutex_t findResLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t makeResLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t dbLock = PTHREAD_MUTEX_INITIALIZER;
 
 Request createRequest(int day, int startTime, int endTime, int seatsNeeded, User user)
 {
@@ -169,13 +173,14 @@ Reservation findReservation(Request request)
   //Create SQL statement
   char sql[150];
   sprintf(sql, "SELECT RoomNumber,Seating,Purpose FROM Room WHERE Seating >= %d", request.seatsNeeded);
-  printf("%s\n", sql);
 
   compatibleRooms = malloc(sizeof(Room) * MAX_ROOMS);
   compatibleRoomsSize = 0;
 
-  //Execute SQL statement
+  pthread_mutex_lock(&dbLock);
   err = sqlite3_exec(db, sql, selectRoomCallback, (void*)data, &errMsg);
+  pthread_mutex_unlock(&dbLock);
+
   if( err != SQLITE_OK ){
     fprintf(stderr, "SQL error: %s\n", errMsg);
     sqlite3_free(errMsg);
@@ -188,7 +193,6 @@ Reservation findReservation(Request request)
 
   //If the a valid reservation can be made from a request, this will be set to 1
   int foundRes = 0;
-
   int roomIndex = 0;
 
   //Loop through each of the compatible rooms
@@ -201,19 +205,19 @@ Reservation findReservation(Request request)
 
     sprintf(sql, "SELECT StartTime,EndTime FROM Reservation WHERE RoomNumber = %d AND Day = %d", currentRoom.roomNum, request.day);
 
+    pthread_mutex_lock(&dbLock);
     err = sqlite3_exec(db, sql, selectResTimeCallback, (void*)data, &errMsg);
+    pthread_mutex_unlock(&dbLock);
+
     if( err != SQLITE_OK ){
       fprintf(stderr, "SQL error: %s\n", errMsg);
       sqlite3_free(errMsg);
       exit(0);
     }
 
-    printf("Room #: %d\n", currentRoom.roomNum);
-
     for (int i = 0; i < resIntervalsSize; i++)
     {
       TimeInterval interval = resIntervals[i];
-      printf("StartTime: %d\nEndTime: %d\n", interval.startTime, interval.endTime);
     }
 
     //This will be set to 1 if there any existing reservations overlap with what the user is trying to request
@@ -229,6 +233,11 @@ Reservation findReservation(Request request)
     //If no overlapping time periods have been found, the request is valid and the proper room has been found
     if (foundOverlap == 0)
     {
+
+      //ADD A SEARCH OF THE RESERVATION QUEUE TO MAKE SURE THE SAME RESERVATION IS NOT GOING TO BE MADE
+      //THAT SEARCH FUNCTION MUST BLOCK RESERVATIONS QUEUE FROM CHANGING UNTIL IT IS DONE AND MUST WAIT IF THE RESERVATION QUEUE IS CURRENTLY IN THE CRITICAL SECTION
+
+      //DO THIS STUFF IF NO MATCHING RESERVATION IS FOUND IN THE QUEUE - IF NOT DO NOTHING, AND THE LOOP WILL START AGAIN
       foundRes = 1;
 
       //Initialize the reservation object to be returned
@@ -253,11 +262,140 @@ Reservation findReservation(Request request)
 
   if (foundRes == 0)
   {
-    printf("No room for the specified times was found, exiting\n");
-    exit(0);
+    printf("No room for %s was found, exiting\n", request.user.email);
+    pthread_mutex_unlock(&reqQueueLock);
+    pthread_mutex_unlock(&findResLock);
+    pthread_exit(NULL);
   }
-  /*else
-    printf("Your request can be completed\nYour reservation is as follows:\nRoomNum: %d\nDay: %d\nStartTime: %d\nEndTime: %d\n", reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime);*/
+  else
+    printf("%s's reservation is as follows:\nRoomNum: %d\nDay: %d\nStartTime: %d\nEndTime: %d\nuserEmail:%s\n", reservation.user.email, reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime, reservation.user.email);
 
   return reservation;
+}
+
+void makeReservation(Reservation reservation)
+{
+  sqlite3 *db;
+  int err;
+  char *errMsg;
+  const char *data = "Callback function called";
+
+  //Opening the database
+  //Check if the file at dbFilename exists
+  if(access(dbFilename, F_OK) != -1) {
+    //If the file exists, open the database
+    err = sqlite3_open(dbFilename, &db);
+    if (err)
+    {
+      printf("The database could not be opened\n");
+      exit(0);
+    }
+  }
+  else
+  {
+    //If the file doesn't exist, exit
+    printf("The database could not be found: %s does not exist\n", dbFilename);
+    exit(0);
+  }
+
+  //Create SQL INSERT statement
+  char sql[150];
+  sprintf(sql, "INSERT INTO Reservation (RoomNumber,Day,StartTime,EndTime,UserID) VALUES (%d,%d,%d,%d,%d)", reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime, reservation.user.userID);
+
+  pthread_mutex_lock(&dbLock);
+  err = sqlite3_exec(db, sql, makeReservationCallback, (void*)data, &errMsg);
+  pthread_mutex_unlock(&dbLock);
+
+  if( err != SQLITE_OK ){
+    fprintf(stderr, "SQL error: %s\n", errMsg);
+    sqlite3_free(errMsg);
+  }else{
+    printf("Reservation for %s added in the database\n", reservation.user.email);
+  }
+}
+
+static int makeReservationCallback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+   int i;
+   for(i=0; i<argc; i++){
+      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+   }
+   printf("\n");
+   return 0;
+}
+
+void* startRequest(void *arg)
+{
+  //Convert the void pointer to a pointer to a Request
+  Request *ptr = (Request *)arg;
+  
+  //CHECK THE DATABASE TO MAKE SURE THE USER IS REGISTERED AND REGISTER IF NOT – MUST USE MUTEX LOCKS FOR INTEGRITY OF USER TABLE
+
+  pthread_mutex_lock(&reqQueueLock);
+  //printf("Locked reqQueueLock\n");
+
+    enqueueRequest(&reqQueue, *ptr);
+
+  pthread_mutex_unlock(&reqQueueLock);
+  //printf("Unlocked reqQueueLock\n");
+
+  pthread_t nextThread;
+  pthread_create(&nextThread, NULL, processNextRequest, NULL);
+  pthread_join(nextThread, NULL);
+
+  return NULL;
+}
+
+void* processNextRequest()
+{
+  pthread_mutex_lock(&findResLock);
+  //printf("Locked findResLock\n");
+
+    pthread_mutex_lock(&reqQueueLock);
+    //printf("Locked reqQueueLock\n");
+
+      Request request = dequeueRequest(&reqQueue);
+
+    pthread_mutex_unlock(&reqQueueLock);
+    //printf("Unlocked reqQueueLock\n");
+
+    Reservation reservation = findReservation(request);
+
+    pthread_mutex_lock(&resQueueLock);
+    //printf("Locked resQueueLock\n");
+
+      enqueueReservation(&resQueue, reservation);
+
+    pthread_mutex_unlock(&resQueueLock);
+    //printf("Unlocked resQueueLock\n");
+
+  pthread_mutex_unlock(&findResLock);
+  //printf("Unlocked findResLock\n");
+
+  pthread_t nextThread;
+  pthread_create(&nextThread, NULL, processNextReservation, NULL);
+  pthread_join(nextThread, NULL);
+
+  return NULL;
+}
+
+void* processNextReservation()
+{
+  pthread_mutex_lock(&makeResLock);
+  //printf("Locked makeRes\n");
+
+    pthread_mutex_lock(&resQueueLock);
+    //printf("Locked resQueueLock\n");
+
+      Reservation reservation = dequeueReservation(&resQueue);
+
+    pthread_mutex_unlock(&resQueueLock);
+    //printf("Unlocked resQueueLock\n");
+
+    makeReservation(reservation);
+
+  pthread_mutex_unlock(&makeResLock);
+  //printf("Unlocked makeRes\n");
+
+  return NULL;
 }

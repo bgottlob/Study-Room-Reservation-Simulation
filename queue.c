@@ -6,6 +6,10 @@
 RequestQueue reqQueue;
 ReservationQueue resQueue;
 
+//Initializers for global mutex locks
+pthread_mutex_t reqQueueLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t resQueueLock = PTHREAD_MUTEX_INITIALIZER;
+
 RequestQueue createRequestQueue()
 {
   RequestQueue queue;
@@ -18,7 +22,7 @@ RequestQueue createRequestQueue()
 
 void enqueueRequest(RequestQueue *queue, Request request)
 {
-  struct RequestNode *newNode = malloc(sizeof(struct RequestNode));
+  struct RequestNode *newNode = malloc(sizeof(struct RequestNode)); 
 
   newNode->request = request;
 

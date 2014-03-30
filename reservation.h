@@ -3,9 +3,13 @@
 
 #include "user.h"
 #include <time.h>
+#include <pthread.h>
 
 //Global variable for the file name of the database
 extern char dbFilename[25];
+
+//Global mutex locks for reservation and request operations
+extern pthread_mutex_t findResLock, makeResLock, dbLock;
 
 //A Request represents the user's input into the system
 typedef struct {
@@ -57,22 +61,14 @@ static int selectRoomCallback(void *NotUsed, int argc, char **argv, char **azCol
 Request createRequest(int day, int startTime, int endTime, int seatsNeeded, User user);
 Reservation createReservation(int roomNum, int day, int startTime, int endTime, User user);
 
-/*
-  Finds a room and makes a reservation for the user
-  This is the entry point of a user thread
-*/
-void processRequest(Request request);
-
-/*
-  Makes a reservation for an admin user
-*/
-void processAdminReservation(Reservation reservation);
-
 //Takes a request and returns a reservation for the user
 Reservation findReservation(Request request);
 
 //Adds a reservation to the database
-void makeReservation();
+void makeReservation(Reservation reservation);
+
+//A callback function for the makeReservation INSERT statement just in case something goes wrong
+static int makeReservationCallback(void *NotUsed, int argc, char **argv, char **azColName);
 
 //A callback function to get the results of a SELECT query on the Reservation table and store TimeIntervals
 static int selectResTimeCallback(void *NotUsed, int argc, char **argv, char **azColName);
@@ -80,5 +76,17 @@ static int selectResTimeCallback(void *NotUsed, int argc, char **argv, char **az
 //Static variable for holding the TimeInterval structs found from a query on the Reservation table
 static TimeInterval *resIntervals;
 int resIntervalsSize;
+
+//Enqueues a request on the request queue and uses mutex locks for synchronization then creates a new thread for dequeuing and servicing a request
+void *startRequest(void *arg);
+
+//Dequeues the next request in the request queue and finds a reservation for it
+void* processNextRequest();
+
+//Dequeues the next reservation in the reservation queue and makes the reservation
+void* processNextReservation();
+
+//Makes a reservation for an admin user
+void* processAdminReservation(void *arg);
 
 #endif

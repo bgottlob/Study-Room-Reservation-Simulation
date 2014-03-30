@@ -41,4 +41,7 @@ Reservation dequeueReservation(ReservationQueue *queue);
 extern RequestQueue reqQueue;
 extern ReservationQueue resQueue;
 
+//Global mutex locks for the queues
+extern pthread_mutex_t reqQueueLock, resQueueLock;
+
 #endif
