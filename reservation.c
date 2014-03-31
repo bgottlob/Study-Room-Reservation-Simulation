@@ -722,19 +722,19 @@ void* processNextRequest()
 {
   pthread_mutex_lock(&findResLock);
 
-    pthread_mutex_lock(&reqQueueLock);
+  pthread_mutex_lock(&reqQueueLock);
 
-      Request request = dequeueRequest(&reqQueue);
+  Request request = dequeueRequest(&reqQueue);
 
-    pthread_mutex_unlock(&reqQueueLock);
+  pthread_mutex_unlock(&reqQueueLock);
 
-    Reservation reservation = findReservation(request, 0, NULL);
+  Reservation reservation = findReservation(request, 0, NULL);
 
-    pthread_mutex_lock(&resQueueLock);
+  pthread_mutex_lock(&resQueueLock);
 
-      enqueueReservation(&resQueue, reservation);
+  enqueueReservation(&resQueue, reservation);
 
-    pthread_mutex_unlock(&resQueueLock);
+  pthread_mutex_unlock(&resQueueLock);
 
   pthread_mutex_unlock(&findResLock);
 
@@ -788,7 +788,7 @@ void* processAdminReservation(void *arg)
   //If a findReservation operation is going on while an administrator reservation is being serviced, the findReservation op may not see that an admin's reservation is going to be created, which could lead to a case where the same room is reserved at the same time
   pthread_mutex_lock(&findResLock);
   pthread_mutex_lock(&resQueueLock);
-    enqueueReservation(&resQueue, *ptr);
+  enqueueReservation(&resQueue, *ptr);
   pthread_mutex_unlock(&resQueueLock);
   pthread_mutex_unlock(&findResLock);
 
