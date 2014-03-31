@@ -5,6 +5,12 @@
 #include "reservation.h"
 #include <pthread.h>
 #include <stdlib.h>
+#include "sqlite3.h"
+
+static int callback(void *NotUsed, int argc, char **argv, char **azColName)
+{
+  return 0;
+}
 
 int main() {
 
@@ -12,34 +18,304 @@ int main() {
   reqQueue = createRequestQueue();
   resQueue = createReservationQueue();
 
-  /*Request req = createRequest(5, 12, 13, 12, createUser(867530, "smittywerbenjagermanjensen@gmail.com", 1));
-  Reservation res = findReservation(req);
-  makeReservation(res);*/
+  //Deletes .txt output files from previous program execution
+  system("rm *.txt");
 
-  pthread_t t1, t2, t3, t4, t5;
+  //Clearing the data in the datbase before testing
+  sqlite3 *db;
+  int err;
+  char *errMsg;
+  const char *data = "Callback function called";
 
-  /*Request *r1 = (Request *)malloc(sizeof(Request));
-  *r1 = createRequest(8, 12, 13, 12, createUser(12345, "faculty1@gmail.com", 2));
+  //Opening the database
+  //Check if the file at dbFilename exists
+  if(access(dbFilename, F_OK) != -1) {
+    //If the file exists, open the database
+    err = sqlite3_open(dbFilename, &db);
+    if (err)
+    {
+      printf("The database could not be opened, exiting\n");
+      exit(0);
+    }
+  }
+  else
+  {
+    //If the file doesn't exist, exit
+    printf("The database could not be found: %s does not exist, exiting\n", dbFilename);
+    exit(0);
+  }
 
-  Request *r2 = (Request *)malloc(sizeof(Request));
-  *r2 = createRequest(8, 12, 13, 12, createUser(23456, "student1@gmail.com", 1));
+  //Delete the data in the Reservation table
+  char sql[150];
+  sprintf(sql, "DELETE FROM Reservation");
 
-  Request *r3 = (Request *)malloc(sizeof(Request));
-  *r3 = createRequest(8, 12, 13, 12, createUser(34567, "faculty2@gmail.com", 2));
+  err = sqlite3_exec(db, sql, callback, (void*)data, &errMsg);
 
-  Request *r4 = (Request *)malloc(sizeof(Request));
-  *r4 = createRequest(8, 12, 13, 12, createUser(45678, "student2@gmail.com", 1));
+  if( err != SQLITE_OK ){
+    fprintf(stderr, "SQL error: %s\n", errMsg);
+    sqlite3_free(errMsg);
+    exit(0);
+  }
 
-  Reservation *adminRes = (Reservation *)malloc(sizeof(Reservation));
-  *adminRes = createReservation(413, 8, 13, 14, createUser(37828, "admin@tcnj.edu", 0));
+  //Delete the data in the User table
+  /*sprintf(sql, "DELETE FROM User");
 
-  pthread_create(&t1, NULL, startRequest, r1);
-  pthread_create(&t2, NULL, startRequest, r2);
-  pthread_create(&t3, NULL, startRequest, r3);
-  pthread_create(&t4, NULL, startRequest, r4);
+  err = sqlite3_exec(db, sql, callback, (void*)data, &errMsg);
+  if( err != SQLITE_OK ){
+    fprintf(stderr, "SQL error: %s\n", errMsg);
+    sqlite3_free(errMsg);
+    exit(0);
+  }*/
+
+  sqlite3_close(db);
+
+  //----------------TEST CASES BEGIN HERE--------------------
+
+  //----------------TEST CASE #1--------------------
+  //Priority queue demonstration
+
+  /*pthread_t t1, t2, t3, t4;
+
+  //Creating two faculty requests followed by two student requests
+  Request *fac1 = (Request *)malloc(sizeof(Request));
+  *fac1 = createRequest(8, 12, 13, 6, createUser(122345, "faculty1@tcnj.edu", 2));
+
+  //Used to ensure that each request has a different created time, which would be true in a real system
+  sleep(2);
+
+  Request *fac2 = (Request *)malloc(sizeof(Request));
+  *fac2 = createRequest(8, 12, 13, 6, createUser(342567, "faculty2@tcnj.edu", 2));
+
+  Request *stud1 = (Request *)malloc(sizeof(Request));
+  *stud1 = createRequest(8, 12, 13, 6, createUser(232456, "student1@tcnj.edu", 1));
 
   sleep(2);
 
+  Request *stud2 = (Request *)malloc(sizeof(Request));
+  *stud2 = createRequest(8, 12, 13, 6, createUser(425678, "student2@tcnj.edu", 1));
+
+  enqueueRequest(&reqQueue, *fac1);
+  enqueueRequest(&reqQueue, *fac2);
+  enqueueRequest(&reqQueue, *stud1);
+  enqueueRequest(&reqQueue, *stud2);
+
+  //Begin servicing requests concurrently
+  pthread_create(&t1, NULL, startRequest, fac1);
+  pthread_create(&t2, NULL, startRequest, fac2);
+  pthread_create(&t3, NULL, startRequest, stud1);
+  pthread_create(&t4, NULL, startRequest, stud2);
+
+  pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
+  pthread_join(t3, NULL);
+  pthread_join(t4, NULL);
+
+  fac1 = NULL;
+  free(fac1);
+
+  fac2 = NULL;
+  free(fac2);
+
+  stud1 = NULL;
+  free(stud1);
+
+  stud2 = NULL;
+  free(stud2);*/
+
+  //----------------TEST CASE #2--------------------
+  //Priority queue demonstration
+
+  /*pthread_t t1, t2, t3, t4;
+
+  //Creating two faculty requests followed by two student requests
+  Request *fac1 = (Request *)malloc(sizeof(Request));
+  *fac1 = createRequest(8, 12, 13, 12, createUser(122345, "faculty1@tcnj.edu", 2));
+
+  sleep(2);
+
+  Request *fac2 = (Request *)malloc(sizeof(Request));
+  *fac2 = createRequest(8, 12, 13, 12, createUser(342567, "faculty2@tcnj.edu", 2));
+
+  Request *stud1 = (Request *)malloc(sizeof(Request));
+  *stud1 = createRequest(8, 12, 13, 12, createUser(232456, "student1@tcnj.edu", 1));
+
+  sleep(2);
+
+  Request *stud2 = (Request *)malloc(sizeof(Request));
+  *stud2 = createRequest(8, 12, 13, 12, createUser(425678, "student2@tcnj.edu", 1));
+
+  enqueueRequest(&reqQueue, *fac1);
+  enqueueRequest(&reqQueue, *fac2);
+  enqueueRequest(&reqQueue, *stud1);
+  enqueueRequest(&reqQueue, *stud2);
+
+  pthread_create(&t1, NULL, startRequest, fac1);
+  pthread_create(&t2, NULL, startRequest, fac2);
+  pthread_create(&t3, NULL, startRequest, stud1);
+  pthread_create(&t4, NULL, startRequest, stud2);
+
+  pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
+  pthread_join(t3, NULL);
+  pthread_join(t4, NULL);
+
+  fac1 = NULL;
+  free(fac1);
+
+  fac2 = NULL;
+  free(fac2);
+
+  stud1 = NULL;
+  free(stud1);
+
+  stud2 = NULL;
+  free(stud2);*/
+
+  //----------------TEST CASE #3-------------------
+
+  /*pthread_t t1, t2, t3, t4;
+
+  //Creating two faculty requests followed by two student requests
+  Request *fac1 = (Request *)malloc(sizeof(Request));
+  *fac1 = createRequest(8, 12, 13, 6, createUser(122345, "faculty1@tcnj.edu", 2));
+
+  //Used to ensure that each request has a different created time, which would be true in a real system
+  sleep(2);
+
+  Request *fac2 = (Request *)malloc(sizeof(Request));
+  *fac2 = createRequest(8, 12, 13, 6, createUser(342567, "faculty2@tcnj.edu", 2));
+
+  Request *stud1 = (Request *)malloc(sizeof(Request));
+  *stud1 = createRequest(8, 12, 13, 6, createUser(232456, "student1@tcnj.edu", 1));
+
+  sleep(2);
+
+  Request *stud2 = (Request *)malloc(sizeof(Request));
+  *stud2 = createRequest(8, 12, 13, 6, createUser(425678, "student2@tcnj.edu", 1));
+
+  enqueueRequest(&reqQueue, *fac1);
+  enqueueRequest(&reqQueue, *fac2);
+  enqueueRequest(&reqQueue, *stud1);
+  enqueueRequest(&reqQueue, *stud2);
+
+  //Begin servicing requests concurrently
+  pthread_create(&t1, NULL, startRequest, fac1);
+  pthread_create(&t2, NULL, startRequest, fac2);
+  pthread_create(&t3, NULL, startRequest, stud1);
+  pthread_create(&t4, NULL, startRequest, stud2);
+
+  pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
+  pthread_join(t3, NULL);
+  pthread_join(t4, NULL);
+
+  fac1 = NULL;
+  free(fac1);
+
+  fac2 = NULL;
+  free(fac2);
+
+  stud1 = NULL;
+  free(stud1);
+
+  stud2 = NULL;
+  free(stud2);
+
+  cancelReservation(createReservation(202, 8, 12, 13, createUser(425678, "student2@tcnj.edu", 1)));*/
+
+  //-----------TEST CASE #4--------------
+  /*pthread_t t1, t2, t3, t4, t5;
+
+  //Creating two faculty requests followed by two student requests
+  Request *fac1 = (Request *)malloc(sizeof(Request));
+  *fac1 = createRequest(8, 12, 13, 6, createUser(122345, "faculty1@tcnj.edu", 2));
+
+  //Used to ensure that each request has a different created time, which would be true in a real system
+  sleep(2);
+
+  Request *fac2 = (Request *)malloc(sizeof(Request));
+  *fac2 = createRequest(8, 12, 13, 6, createUser(342567, "faculty2@tcnj.edu", 2));
+
+  Request *stud1 = (Request *)malloc(sizeof(Request));
+  *stud1 = createRequest(8, 12, 13, 6, createUser(232456, "student1@tcnj.edu", 1));
+
+  sleep(2);
+
+  Request *stud2 = (Request *)malloc(sizeof(Request));
+  *stud2 = createRequest(8, 12, 13, 6, createUser(425678, "student2@tcnj.edu", 1));
+
+  enqueueRequest(&reqQueue, *fac1);
+  enqueueRequest(&reqQueue, *fac2);
+  enqueueRequest(&reqQueue, *stud1);
+  enqueueRequest(&reqQueue, *stud2);
+
+  Reservation *adminRes = (Reservation *)malloc(sizeof(Reservation));
+  *adminRes = createReservation(110, 8, 12, 13, createUser(852365, "admin@tcnj.edu", 0));
+
+  //Begin servicing requests concurrently
+  pthread_create(&t1, NULL, startRequest, fac1);
+  pthread_create(&t2, NULL, startRequest, fac2);
+  pthread_create(&t3, NULL, startRequest, stud1);
+  pthread_create(&t4, NULL, startRequest, stud2);
+
+  pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
+  pthread_join(t3, NULL);
+  pthread_join(t4, NULL);
+
+  pthread_create(&t5, NULL, processAdminReservation, adminRes);
+  pthread_join(t5, NULL);
+
+  fac1 = NULL;
+  free(fac1);
+
+  fac2 = NULL;
+  free(fac2);
+
+  stud1 = NULL;
+  free(stud1);
+
+  stud2 = NULL;
+  free(stud2);
+
+  adminRes = NULL;
+  free(adminRes);*/
+
+
+  //-----------------TEST CASE #5----------------
+  /*pthread_t t1, t2, t3, t4, t5;
+
+  //Creating two faculty requests followed by two student requests
+  Request *fac1 = (Request *)malloc(sizeof(Request));
+  *fac1 = createRequest(8, 12, 13, 6, createUser(122345, "faculty1@tcnj.edu", 2));
+
+  //Used to ensure that each request has a different created time, which would be true in a real system
+  sleep(2);
+
+  Request *fac2 = (Request *)malloc(sizeof(Request));
+  *fac2 = createRequest(8, 12, 13, 6, createUser(342567, "faculty2@tcnj.edu", 2));
+
+  Request *stud1 = (Request *)malloc(sizeof(Request));
+  *stud1 = createRequest(8, 12, 13, 6, createUser(232456, "student1@tcnj.edu", 1));
+
+  sleep(2);
+
+  Request *stud2 = (Request *)malloc(sizeof(Request));
+  *stud2 = createRequest(8, 12, 13, 6, createUser(425678, "student2@tcnj.edu", 1));
+
+  enqueueRequest(&reqQueue, *fac1);
+  enqueueRequest(&reqQueue, *fac2);
+  enqueueRequest(&reqQueue, *stud1);
+  enqueueRequest(&reqQueue, *stud2);
+
+  Reservation *adminRes = (Reservation *)malloc(sizeof(Reservation));
+  *adminRes = createReservation(110, 8, 12, 13, createUser(852365, "admin@tcnj.edu", 0));
+
+  //Begin servicing requests concurrently
+  pthread_create(&t1, NULL, startRequest, fac1);
+  pthread_create(&t2, NULL, startRequest, fac2);
+  pthread_create(&t3, NULL, startRequest, stud1);
+  pthread_create(&t4, NULL, startRequest, stud2);
   pthread_create(&t5, NULL, processAdminReservation, adminRes);
 
   pthread_join(t1, NULL);
@@ -47,49 +323,79 @@ int main() {
   pthread_join(t3, NULL);
   pthread_join(t4, NULL);
   pthread_join(t5, NULL);
-  r1 = NULL;
-  free(r1);
-  r2 = NULL;
-  free(r2);
-  r3 = NULL;
-  free(r3);
-  r4 = NULL;
-  free(r4);
+
+  fac1 = NULL;
+  free(fac1);
+
+  fac2 = NULL;
+  free(fac2);
+
+  stud1 = NULL;
+  free(stud1);
+
+  stud2 = NULL;
+  free(stud2);
+
   adminRes = NULL;
   free(adminRes);*/
 
-  /*Reservation res1 = createReservation(311, 8, 13, 14, createUser(23456, "student1@gmail.com", 2));
-  enqueueReservation(&resQueue, res1);
-  Reservation res2 = createReservation(314, 8, 16, 17, createUser(23456, "student1@gmail.com", 1));
-  enqueueReservation(&resQueue, res2);
+  //-----------------TEST CASE #6----------------
+  /*pthread_t t1, t2, t3, t4, t5;
 
-  Reservation rSearch = createReservation(200, 8, 13, 14, createUser(23456, "student1@gmail.com", 1));
+  //Creating two faculty requests followed by two student requests
+  Request *fac1 = (Request *)malloc(sizeof(Request));
+  *fac1 = createRequest(8, 12, 13, 12, createUser(122345, "faculty1@tcnj.edu", 2));
 
-  printf("FoundRes: %d\n", searchForRes(&resQueue, res2));*/
+  //Used to ensure that each request has a different created time, which would be true in a real system
+  sleep(2);
 
-  /*Request deqreq = dequeueRequest(&reqQueue);
-  printf("Dequeued req: \nday: %d\nstartTime: %d\nendTime: %d\nseats: %d\nuserEmail: %s\n", deqreq.day, deqreq.startTime, deqreq.endTime, deqreq.seatsNeeded, deqreq.user.email);*/
+  Request *fac2 = (Request *)malloc(sizeof(Request));
+  *fac2 = createRequest(8, 12, 13, 12, createUser(342567, "faculty2@tcnj.edu", 2));
 
-  /*Reservation deqres = dequeueReservation(&resQueue);
-  printf("Dequeued res: \nroom: %d\nday: %d\nstartTime: %d\nendTime: %d\nuserEmail: %s\n", deqres.roomNum, deqres.day, deqres.startTime, deqres.endTime, deqres.user.email);*/
+  Request *stud1 = (Request *)malloc(sizeof(Request));
+  *stud1 = createRequest(8, 12, 13, 12, createUser(232456, "student1@tcnj.edu", 1));
 
+  sleep(2);
 
-  Request *r1 = (Request *)malloc(sizeof(Request));
-  *r1 = createRequest(8, 12, 13, 12, createUser(12345, "faculty1@gmail.com", 2));
+  Request *stud2 = (Request *)malloc(sizeof(Request));
+  *stud2 = createRequest(8, 12, 13, 12, createUser(425678, "student2@tcnj.edu", 1));
 
-  pthread_create(&t1, NULL, startRequest, r1);
-
-  sleep(1);
+  enqueueRequest(&reqQueue, *fac1);
+  enqueueRequest(&reqQueue, *fac2);
+  enqueueRequest(&reqQueue, *stud1);
+  enqueueRequest(&reqQueue, *stud2);
 
   Reservation *adminRes = (Reservation *)malloc(sizeof(Reservation));
-  *adminRes = createReservation(220, 8, 13, 14, createUser(37828, "admin@tcnj.edu", 0));
+  *adminRes = createReservation(413, 8, 12, 13, createUser(852365, "admin@tcnj.edu", 0));
 
-  pthread_create(&t5, NULL, processAdminReservation, adminRes);
+  //Begin servicing requests concurrently
+  pthread_create(&t1, NULL, startRequest, fac1);
+  pthread_create(&t2, NULL, startRequest, fac2);
+  pthread_create(&t3, NULL, startRequest, stud1);
+  pthread_create(&t4, NULL, startRequest, stud2);
 
   pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
+  pthread_join(t3, NULL);
+  pthread_join(t4, NULL);
+
+  pthread_create(&t5, NULL, processAdminReservation, adminRes);
   pthread_join(t5, NULL);
 
-  cancelReservation(createReservation(220, 8, 13, 14, createUser(37828, "admin@tcnj.edu", 0)));
+  fac1 = NULL;
+  free(fac1);
+
+  fac2 = NULL;
+  free(fac2);
+
+  stud1 = NULL;
+  free(stud1);
+
+  stud2 = NULL;
+  free(stud2);
+
+  adminRes = NULL;
+  free(adminRes);*/
 
   return 0;
 }

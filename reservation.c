@@ -267,6 +267,7 @@ Reservation findReservation(Request request, int mustReschedule, Reservation *ad
       reservation.user = request.user;
 
       pthread_mutex_lock(&resQueueLock);
+
       //If this reservation is already in the resQueue, it can't be made and a different reservation should be found - if the return value of the searchForRes function is 0, a matching reservation has not been found in the queue; if the return value is one, foundRes will stay at 0 and another reservation may be found
       if (searchForRes(&resQueue, reservation) == 0)
         foundRes = 1;
@@ -287,7 +288,7 @@ Reservation findReservation(Request request, int mustReschedule, Reservation *ad
 
   if (foundRes == 0 && mustReschedule == 0)
   {
-    printf("No room for %s was found, exiting\n", request.user.email);
+    printf("No room for %s was found, exiting\n\n", request.user.email);
     pthread_mutex_unlock(&reqQueueLock);
     pthread_mutex_unlock(&findResLock);
     pthread_mutex_unlock(&makeResLock);
@@ -295,7 +296,7 @@ Reservation findReservation(Request request, int mustReschedule, Reservation *ad
   }
   else if (foundRes == 0 && mustReschedule == 1)
   {
-    printf("%s: Your reservation was overridden by an administrator and could not be rescheduled\n", request.user.email);
+    printf("%s: Your reservation was overridden by an administrator and could not be rescheduled\n\n", request.user.email);
 
     //Write to output file
     char fileName[154];
@@ -306,13 +307,19 @@ Reservation findReservation(Request request, int mustReschedule, Reservation *ad
     if (file == NULL)
       printf("Error opening %s\n", fileName);
     else
-      fprintf(file, "%s: Your reservation was overridden by an administrator and could not be rescheduled\n", request.user.email);
+      fprintf(file, "%s: Your reservation was overridden by an administrator and could not be rescheduled\n\n", request.user.email);
 
     fclose(file);
 
     Reservation res;
     res.day = -1;
     return res;
+  }
+  else if (foundRes == 1 && mustReschedule == 0) //This reservation will definitely be added to the database
+  {
+    //printf("%s: Your reservation is going to be scheduled as follows:\nRoomNum: %d\nDay: %d\nStartTime: %d\nEndTime: %d\n\n", reservation.user.email, reservation.roomNum, reservation.day, reservation.startTime, reservation.endTime);
+
+    printf("%s: Your reservation is going to be scheduled\n\n", reservation.user.email);
   }
 
   return reservation;
@@ -558,23 +565,6 @@ void makeAdminReservation(Reservation reservation)
 
         makeReservation(newRes);
       }
-      else
-      {
-        printf("%s: Your reservation was overridden by an administrator and could not be rescheduled\n\n", newRes.user.email);
-
-        //Write to output file
-        char fileName[154];
-        sprintf(fileName, "%s.txt", newRes.user.email);
-
-        FILE *file;
-        file = fopen(fileName, "a+");
-        if (file == NULL)
-          printf("Error opening %s\n", fileName);
-        else
-          fprintf(file, "%s: Your reservation was overridden by an administrator and could not be rescheduled\n\n", newRes.user.email);
-
-        fclose(file);
-      }
 
     }
   }
@@ -721,14 +711,6 @@ void* startRequest(void *arg)
 
   registerUser(ptr->user);
 
-  pthread_mutex_lock(&reqQueueLock);
-  //printf("Locked reqQueueLock\n");
-
-    enqueueRequest(&reqQueue, *ptr);
-
-  pthread_mutex_unlock(&reqQueueLock);
-  //printf("Unlocked reqQueueLock\n");
-
   pthread_t nextThread;
   pthread_create(&nextThread, NULL, processNextRequest, NULL);
   pthread_join(nextThread, NULL);
@@ -739,28 +721,22 @@ void* startRequest(void *arg)
 void* processNextRequest()
 {
   pthread_mutex_lock(&findResLock);
-  //printf("Locked findResLock\n");
 
     pthread_mutex_lock(&reqQueueLock);
-    //printf("Locked reqQueueLock\n");
 
       Request request = dequeueRequest(&reqQueue);
 
     pthread_mutex_unlock(&reqQueueLock);
-    //printf("Unlocked reqQueueLock\n");
 
     Reservation reservation = findReservation(request, 0, NULL);
 
     pthread_mutex_lock(&resQueueLock);
-    //printf("Locked resQueueLock\n");
 
       enqueueReservation(&resQueue, reservation);
 
     pthread_mutex_unlock(&resQueueLock);
-    //printf("Unlocked resQueueLock\n");
 
   pthread_mutex_unlock(&findResLock);
-  //printf("Unlocked findResLock\n");
 
   pthread_t nextThread;
   pthread_create(&nextThread, NULL, processNextReservation, NULL);
@@ -771,25 +747,34 @@ void* processNextRequest()
 
 void* processNextReservation()
 {
-  //sleep(2);
+
   pthread_mutex_lock(&makeResLock);
-  //printf("Locked makeRes\n");
 
-    pthread_mutex_lock(&resQueueLock);
-    //printf("Locked resQueueLock\n");
+  pthread_mutex_lock(&findResLock);
 
-      Reservation reservation = dequeueReservation(&resQueue);
+  pthread_mutex_lock(&resQueueLock);
 
-    pthread_mutex_unlock(&resQueueLock);
-    //printf("Unlocked resQueueLock\n");
+  Reservation reservation = dequeueReservation(&resQueue);
+
+  pthread_mutex_unlock(&resQueueLock);
+
+  pthread_mutex_unlock(&findResLock);
+
+  //Gives findReservation operations the opportunity to run here to demonstrate concurrency
+  sleep(2);
+
+  //findResLock is locked in this thread because if a reservation has been dequeued but is not yet in the database, the findReservation method will not detect it and allow for the same room to be reserved at conflicting times
+
+  pthread_mutex_lock(&findResLock);
 
     if (reservation.user.type == 0)
       makeAdminReservation(reservation);
     else
       makeReservation(reservation);
 
+  pthread_mutex_unlock(&findResLock);
+
   pthread_mutex_unlock(&makeResLock);
-  //printf("Unlocked makeRes\n");
 
   return NULL;
 }
@@ -800,9 +785,12 @@ void* processAdminReservation(void *arg)
 
   registerUser(ptr->user);
 
+  //If a findReservation operation is going on while an administrator reservation is being serviced, the findReservation op may not see that an admin's reservation is going to be created, which could lead to a case where the same room is reserved at the same time
+  pthread_mutex_lock(&findResLock);
   pthread_mutex_lock(&resQueueLock);
     enqueueReservation(&resQueue, *ptr);
   pthread_mutex_unlock(&resQueueLock);
+  pthread_mutex_unlock(&findResLock);
 
   //Create another thread to process the next reservation so that the admin's reservation can be made
   pthread_t nextThread;
